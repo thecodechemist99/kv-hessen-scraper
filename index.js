@@ -2,6 +2,7 @@
 const http_request = require('./src/request.js');
 const params = require('./src/params.json');
 const cheerio = require('cheerio');
+const fs = require('fs').promises;
 
 // setup
 const conn = 'https';
@@ -12,10 +13,15 @@ const options = {
     method: 'GET'
 };
 
+const filename = `exports.csv`;
+createExportFile(filename);
+
 // main program
 search();
 
-async function search() {
+async function search () {
+    console.log('Searching ...');
+
     // get SID cookie
     const cookies = await requestHtml(options, true);
     const sidCookie = cookies[0].split(';', 1)[0];
@@ -45,7 +51,8 @@ async function search() {
     });
 
     // scrape profiles
-    links.forEach(scrapeProfiles);
+    console.log('Scraping content ...');
+    links.forEach(scrapeProfile);
 }
 
 
@@ -61,8 +68,100 @@ async function requestHtml (options, returnCookie) {
 }
 
 // scrape profiles
-async function scrapeProfiles(link) {
-    console.log(link);
+async function scrapeProfile (link) {
+    // request site
+    options.path = '/arztsuche/' + link;
+    const html = await requestHtml(options);
 
+    // extract info
+    const $ = cheerio.load(html);
+    const entry = {
+        name: setName($),
+        address: setAddress($),
+        email: setEmail($),
+        phone: setPhone($),
+        info: setInfo($),
+        officeHours: setOfficeHours($)
+    };
 
+    let str = '';
+    const keys = Object.keys(entry);
+    keys.forEach((key, index) => {
+        str += entry[key];
+        if (index < keys.length - 1) {
+            str += '; ';
+        };
+    });
+    writeToCSV(`${str}\n`);
+}
+
+function setName ($) {
+    try {
+        return $('div .Arzt').html().replace(/\s\s+/g, ' ').trim();
+    } catch (err) {
+        return '';
+    }
+}
+
+function setAddress ($) {
+    try {
+        return $('div .Arzt_links').filter(function() {
+            return $(this).text().trim() === 'Adresse:';
+          }).next().text().replace(/(\n)|(\t)|(<br>)/g, '').trim();
+    } catch (err) {
+        return '';
+    }
+}
+
+function setPhone ($) {
+    try {
+        return $('div .Arzt_links').filter(function() {
+            return $(this).text().trim() === 'Telefon:';
+          }).next().text().replace(/\//g, '').replace(/\s\s+/g, ' ').trim();
+    } catch (err) {
+        return '';
+    }
+}
+
+function setEmail ($) {
+    try {
+        return $('a[class=maillink]').attr('href').split(':', 2)[1];
+    } catch (err) {
+        return '';
+    }
+}
+
+function setInfo ($) {
+    try {
+        return $('div .Arzt_links').filter(function() {
+            return $(this).text().trim() === 'Weitere Merkmale:';
+          }).next().text().replace(/\//g, '').replace(/\s\s+/g, ' ').replace(/(\n\n)|(\n\n\n)/g, '\n').trim();
+    } catch (err) {
+        return '';
+    }
+}
+
+function setOfficeHours ($) {
+    try {
+        return $('div .Sprechzeit').html().replace(/<br>/g, ' ').replace(/\s\s+/g, ' ').trim()
+    } catch (err) {
+        return '';
+    }
+}
+
+// write to file
+function createExportFile (name) {
+    try {
+        fs.writeFile(`./${name}`, 'Name; Adresse; E-Mail; Telefon; Information; Telefonische Erreichbarkeit und Sprechstunde\n');
+    } catch (err) {
+        console.error(`Error creating file: ${err}`);
+    }
+}
+
+function writeToCSV (data) {
+    try {
+        fs.appendFile(filename, data);
+    } catch (err) {
+        console.error(`Error writing to file: ${err}`);
+    }
 }
