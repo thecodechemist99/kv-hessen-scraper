@@ -1,5 +1,5 @@
 # kv-hessen-scraper
-Web scraper to collect doctor/therapist information from the KV Hessen doctors search.
+Web scraper to collect doctors information from the KV Hessen doctors search.
 
 ## Usage
 Create a file params.json in the `src` directory with the following parameters:
